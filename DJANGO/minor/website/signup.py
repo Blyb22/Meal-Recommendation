@@ -1,85 +1,89 @@
 # -*- coding: utf-8 -*-
-from django.shortcuts import render,redirect
+from django.shortcuts import render, redirect
 from django.contrib.auth.models import User
-from django.contrib.auth import login,authenticate
+from django.contrib.auth import login, authenticate
 from django.contrib import messages
+from django.conf import settings
 from .models import Profile
 import os
 import pandas as pd
-#from django.contrib import messages
 
 def signup_user(request):
-    if request.method=='POST':
-         fname = request.POST.get('fname', 'default')
-         lname = request.POST.get('lname', 'default')
-         number = request.POST.get('number', 'default')  
-         email = request.POST.get('email', 'default')
-         passw = request.POST.get('passw', 'default')
-         re_pass = request.POST.get('re_pass', 'default')
-         
-         if len(fname)<3 or fname.isnumeric():
-             messages.error(request,"First Name should be string with more than 2 character")
-             return render(request,'website/signup.html')
-         if len(lname)<3 or lname.isnumeric():
-             messages.error(request,"Last Name should be string with more than 2 character")
-             return render(request,'website/signup.html')
-         if len(passw)<5:
-             messages.error(request,'Length of password must be greater or equal to 5')
-             return render(request,'website/signup.html')
-         if passw.isalnum()==False:
-             messages.error(request,'Password must be alphanumeric')
-             return render(request,'website/signup.html')
-         elif(passw != re_pass):
-             messages.error(request, 'Error! Password does not match')
-             return render(request,'website/signup.html')
-         elif len(number)!=10:
-             messages.error(request, 'Error! Number must contain 10 digits')
-             return render(request,'website/signup.html')
-         else:
-             try:
-                 myuser= User.objects.get(username=number)
-                 if(myuser.username==number):
-                     messages.error(request,' Number :- '+myuser.username+' already exist ! Please use another number')
-                     return render(request, 'website/signup.html')
-             except User.DoesNotExist:
-                 myuser=User.objects.create_user(number,email,passw)
-                 myuser.first_name =fname
-                 myuser.last_name = lname
-                 myuser.save()
-                 #messages.success(request, 'Registered Successfully')
-                 params={'name' : fname+" "+lname,'number':number, 'email':email}
-                 user=authenticate(username=number,password=passw)
-                 login(request,user)
-                 messages.success(request,"User created successfully, Now please complete your profile")
-                 return render(request,'website/profile.html',params)
+    if request.method == 'POST':
+        fname = request.POST.get('fname', 'default')
+        lname = request.POST.get('lname', 'default')
+        number = request.POST.get('number', 'default')
+        email = request.POST.get('email', 'default')
+        passw = request.POST.get('passw', 'default')
+        re_pass = request.POST.get('re_pass', 'default')
+
+        if len(fname) < 3 or fname.isnumeric():
+            messages.error(request, "First Name should be a string with more than 2 characters")
+            return render(request, 'website/signup.html')
+        if len(lname) < 3 or lname.isnumeric():
+            messages.error(request, "Last Name should be a string with more than 2 characters")
+            return render(request, 'website/signup.html')
+        if len(passw) < 5:
+            messages.error(request, 'Length of password must be greater or equal to 5')
+            return render(request, 'website/signup.html')
+        if not passw.isalnum():
+            messages.error(request, 'Password must be alphanumeric')
+            return render(request, 'website/signup.html')
+        if passw != re_pass:
+            messages.error(request, 'Error! Password does not match')
+            return render(request, 'website/signup.html')
+        if len(number) != 10:
+            messages.error(request, 'Error! Number must contain 10 digits')
+            return render(request, 'website/signup.html')
+
+        try:
+            myuser = User.objects.get(username=number)
+            messages.error(request, 'Number :- ' + myuser.username + ' already exists! Please use another number')
+            return render(request, 'website/signup.html')
+        except User.DoesNotExist:
+            myuser = User.objects.create_user(username=number, email=email, password=passw)
+            myuser.first_name = fname
+            myuser.last_name = lname
+            myuser.save()
+
+            user = authenticate(username=number, password=passw)
+            login(request, user)
+            messages.success(request, "User created successfully, now please complete your profile")
+            params = {'name': fname + " " + lname, 'number': number, 'email': email}
+            return render(request, 'website/profile.html', params)
     else:
-        return render(request,'website/signup.html')
-         
-         
-  
-def fill_CSV(user,lst):
-    
-    filename=r'C:\Users\MMG\Desktop\NBMRS\minor\website\csvfile\user_Profiles.csv'
-    df=pd.read_csv(filename)  
-    
-    if user in df.values:     #user is variable for user
-        df=df.set_index('User_Id')
-        df=df.drop(user,axis=0)
-        df=df.reset_index()
-        df=df.append(pd.Series(lst,index=df.columns),ignore_index=True) #lst = values in list which we want to insert
-        os.remove(filename)
-        df.to_csv(filename,index=False)
+        return render(request, 'website/signup.html')
+
+def fill_CSV(user, lst):
+    # Define the CSV file path
+    filename = os.path.join(settings.BASE_DIR, 'website', 'csvfile', 'user_Profiles.csv')
+
+    # Check if file exists, if not, create a new one with column headers
+    if not os.path.exists(filename):
+        df = pd.DataFrame(columns=['User_Id', 'FoodType', 'Nutrient', 'Disease', 'Diet'])
     else:
-        df=df.append(pd.Series(lst,index=df.columns),ignore_index=True) #lst = values in list which we want to insert
-        os.remove(filename)
-        df.to_csv(filename,index=False)        
-      
-    
+        df = pd.read_csv(filename)
+
+    # Check if the user already exists in the CSV
+    if user in df['User_Id'].values:
+        # Remove the old entry if it exists
+        df = df[df['User_Id'] != user]
+
+    # Create a new DataFrame for the new user data
+    new_row = pd.DataFrame([lst], columns=df.columns)
+
+    # Concatenate the new data
+    df = pd.concat([df, new_row], ignore_index=True)
+
+    # Write back to the CSV
+    df.to_csv(filename, index=False)
 
 def create_profile(request):
-    if request.method=='POST' and request.FILES['image']:
-        image = request.FILES['image']
+    if request.method == 'POST':
+        # Correct way to get the image file, with a default value of None if not provided
+        image = request.FILES.get('image', None)
         
+        # Getting other form fields
         name = request.POST.get('name')
         email = request.POST.get('email')
         number = request.POST.get('number')
@@ -89,36 +93,65 @@ def create_profile(request):
         weight = request.POST.get('weight')
         height = request.POST.get('height')
         favfood = request.POST.get('favfood')
+        
+        # Handling list fields
         ft = request.POST.getlist('food')
-        foodtype="++".join(ft)
+        foodtype = "++".join(ft)
         
         dt = request.POST.getlist('diet')
-        diet="++".join(dt)
+        diet = "++".join(dt)
         
         cs = request.POST.getlist('cuisines')
-        cuisines = '++'.join(cs) 
+        cuisines = "++".join(cs)
         
         nrt = request.POST.getlist('nutrient')
-        nutrient = '++'.join(nrt)
+        nutrient = "++".join(nrt)
         
         des = request.POST.getlist('disease')
-        disease='++'.join(des)
+        disease = "++".join(des)
         
-        medicalhistory=request.POST.get('medicalHistory')
+        medicalhistory = request.POST.get('medicalHistory')
         
-        
-        prfl=Profile(name=name,email=email,number=number,gender=gender,age=age,blood=blood,weight=weight
-                     ,height=height,favfood=favfood,foodtype=foodtype,diet=diet,nutrient=nutrient,
-                     cuisines=cuisines,disease=disease,medicalhistory=medicalhistory,image=image)
+        # Creating the profile
+        prfl = Profile(
+            name=name,
+            email=email,
+            number=number,
+            gender=gender,
+            age=age,
+            blood=blood,
+            weight=weight,
+            height=height,
+            favfood=favfood,
+            foodtype=foodtype,
+            diet=diet,
+            nutrient=nutrient,
+            cuisines=cuisines,
+            disease=disease,
+            medicalhistory=medicalhistory,
+            image=image  # Save the image if uploaded
+        )
         prfl.save()
         
-        fill_CSV(request.user.username,[request.user.username," ".join(ft),nutrient.replace("++"," "),disease.replace("++"," "),diet.replace("++"," ")])      
+        # Assuming fill_CSV is defined elsewhere for saving profile details to a CSV
+        fill_CSV(request.user.username, [
+            request.user.username,
+            " ".join(ft),
+            nutrient.replace("++", " "),
+            disease.replace("++", " "),
+            diet.replace("++", " ")
+        ])
         
-        messages.success(request,'Profile created successfully')
+        # Success message and redirect
+        messages.success(request, 'Profile created successfully')
         return redirect('Home')
+    
     else:
         try:
-            img= Profile.objects.get(number=request.user.username).image.url
-        except:
-            img=""
-        return render(request,'website/profile.html',{'image':img})
+            # Safely check if the image exists before trying to access the URL
+            profile = Profile.objects.get(number=request.user.username)
+            img = profile.image.url if profile.image else ""
+        except Profile.DoesNotExist:
+            img = ""
+        
+        return render(request, 'website/profile.html', {'image': img})

@@ -101,3 +101,5 @@ User_100,veg,calcium, kidney_disease hypertension anemia goitre heart_disease di
 8349852987,veg non-veg,calcium sodium,heart_disease rickets,vegan_diet high_protien_diet
 9993125912,veg non-veg,calcium carbohydrates vitamin_d fiber,diabeties rickets scurvy,vegan_diet type_a_diet paleo_diet low_fat_diet
 8349852989,veg non-veg,protien carbohydrates vitamin_d,diabeties rickets anemia,high_protien_diet type_o_diet omni_diet
+1234567890,veg,phosphorus,obesity,Mediterranean_diet
+0987654321,veg non-veg,protien calcium,rickets pregnancy,vegan_diet high_protien_diet type_a_diet type_o_diet

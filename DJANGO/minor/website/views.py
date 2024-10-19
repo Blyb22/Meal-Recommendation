@@ -1,197 +1,203 @@
-from django.shortcuts import render,redirect
+from django.shortcuts import render, redirect
 from django.contrib import messages
-from django.contrib.auth import authenticate,login,logout
-from .models import Contact
-from .models import Profile
+from django.contrib.auth import authenticate, login, logout
+from django.conf import settings
+from .models import Contact, Profile
 import os
 import datetime
 import pandas as pd
-#from django.http import HttpResponse
 
 def index(request):
     if request.user.is_authenticated:
         try:
-            img= Profile.objects.get(number=request.user.username).image.url
-        except:
-            img=""
-        return render(request,'website/home.html',{'image':img})
+            profile = Profile.objects.get(number=request.user.username)
+            # Check if the profile has an associated image
+            img = profile.image.url if profile.image else ""
+        except Profile.DoesNotExist:
+            img = ""
+        
+        return render(request, 'website/home.html', {'image': img})
     else:
-        return render(request,'website/home.html')
-
-def about(request):
-    if request.user.is_authenticated:
-        try:
-            img= Profile.objects.get(number=request.user.username).image.url
-        except:
-            img=""
-        return render(request,'website/about.html',{'image':img})
-    else:
-        return render(request,'website/about.html')
+        return render(request, 'website/home.html')
 
 
 def login_user(request):
-    if request.method=='POST':
+    if request.method == 'POST':
         number = request.POST.get('number', 'default')
         passw = request.POST.get('passw', 'default')
-        
-        if len(number)!=10:
-            messages.error(request,'Number must contain 10 digits')
-            
+
+        if len(number) != 10:
+            messages.error(request, 'Number must contain 10 digits')
         else:
-            user=authenticate(username=number,password=passw)
-            if user is not None:
-                login(request,user)
-                messages.success(request,'Successfully Logged in')
+            user = authenticate(username=number, password=passw)
+            if user:
+                login(request, user)
+                messages.success(request, 'Successfully Logged in')
                 return redirect('Home')
             else:
-                messages.error(request,'Error : Invalid Creadentials, Please try again')
+                messages.error(request, 'Error: Invalid Credentials, Please try again')
                 return redirect('login')
-    
-    return render(request,'website/login.html')
 
+    return render(request, 'website/login.html')
 
 def logout_user(request):
-    if request.method== 'POST':
+    if request.method == 'POST':
         logout(request)
-        messages.success(request,'Successfully Logged out')
+        messages.success(request, 'Successfully Logged out')
         return redirect('Home')
 
 def decider(request):
     if request.user.is_authenticated:
-        v=Profile.objects.get(number=request.user.username).second_time
-        if(v==False):
-            return redirect('recommend')
-        else:
-            return redirect('SecondRecommend')
-    else:
-        messages.error(request,'you must be logged in for meal')
-        return redirect('Home')
-
-def contact(request):
-    if request.method=='POST':
-        name = request.POST.get('name', 'default')
-        email = request.POST.get('email', 'default')
-        number = request.POST.get('phone', 'default')  
-        message = request.POST.get('message', 'default')
-        
-        if len(name)<3 or name.isnumeric():
-            messages.error(request,"Name should be string with more than 2 character")
-        elif len(number)!=10:
-            messages.error(request,"Number must contain 10 digits")
-        elif len(message)<10:
-            messages.error(request,"Message must contain at least 25 characters")
-        elif len(email)<5:
-            messages.error(request,"Email must contain at least 5 character")
-        else:
-            contact=Contact(name=name,email=email,number=number,message=message)
-            contact.save()
-            messages.success(request,"your message has been sent successfuly")
-            
-    if request.user.is_authenticated:
-        try:
-            img= Profile.objects.get(number=request.user.username).image.url
-        except:
-            img=""
-        return render(request,'website/contact.html',{'image':img})        
-    else:
-        return render(request,'website/contact.html')
+        v = Profile.objects.get(number=request.user.username).second_time
+        return redirect('recommend' if not v else 'SecondRecommend')
+    messages.error(request, 'You must be logged in for meal')
+    return redirect('Home')
 
 
 def buy(request):
-    a=request.POST.get('product_buy')
-    l=list(a.split())
-    
-    filename=r"c:\Users\MMG\Desktop\NBMRS\minor\website\csvfile\recent_activity.csv"
-    df2=pd.read_csv(filename)
-    
-    currentDT = datetime.datetime.now()
-    
-    for meal_id in l:
-        lst=[request.user.username,meal_id,0,0,0,1,currentDT.strftime("%m/%d/%Y %I:%M:%S %p")]
-        df2=df2.append(pd.Series(lst,index=df2.columns),ignore_index=True)
+    if request.method == 'POST':
+        a = request.POST.get('product_buy', '')
+        if not a:
+            messages.error(request, "No product selected")
+            return redirect('Home')
+
+        l = list(a.split())
         
-       
-    os.remove(filename)
-    df2.to_csv(filename,index=False) 
-    
-    Profile.objects.filter(number=request.user.username).update(second_time='True')
-    
+        filename = os.path.join(settings.BASE_DIR, 'website', 'csvfile', 'recent_activity.csv')
+        
+        try:
+            df2 = pd.read_csv(filename)
+        except FileNotFoundError:
+            messages.error(request, "Recent activity file not found.")
+            return redirect('Home')
+
+        currentDT = datetime.datetime.now()
+        new_rows = []
+
+        for meal_id in l:
+            new_row = [request.user.username, meal_id, 0, 0, 0, 1, currentDT.strftime("%m/%d/%Y %I:%M:%S %p")]
+            new_rows.append(new_row)
+
+        # Create a DataFrame from the new rows and append to the existing DataFrame
+        new_df = pd.DataFrame(new_rows, columns=df2.columns)
+        df2 = pd.concat([df2, new_df], ignore_index=True)
+        
+        df2.to_csv(filename, index=False)
+        
+        Profile.objects.filter(number=request.user.username).update(second_time=True)
+        
     return redirect('Home')
 
 def order(request):
-    if Profile.objects.get(number=request.user.username).second_time:
-        filename=r"c:\Users\MMG\Desktop\NBMRS\minor\website\csvfile\recent_activity.csv"
-        filename2=r"c:\Users\MMG\Desktop\NBMRS\minor\website\dataset.csv"
-                
-        df=pd.read_csv(filename)
-        df1=pd.read_csv(filename2)
-        
-        df=df.loc[df["User_Id"]==request.user.username]
-        df = df.sort_values(by='Timestamp',ascending=False)
-        df=df.drop_duplicates(subset=df.columns.difference(['Timestamp']),keep="last") 
-        l=list(df["Meal_Id"])
-        data=pd.DataFrame()
-        for meal in l:
-            df2=df1.loc[df1["Meal_Id"]==meal]
-            if data.empty :
-                data=df2
-            else:
-                lst=df2.to_numpy().tolist()
-                data=data.append(pd.Series(lst[0],index=df2.columns),ignore_index=True)
-                
-        data=data.drop_duplicates(subset='Meal_Id', keep="first") 
-        
-        data=dict(data)
-        
-        ids=list(data['Meal_Id'])
-        n=list(data['Name'])
-        c=list(data['catagory'])
-        vn=list(data['Veg_Non'])
-        r=list(data['Review'])
-        nt=list(data['Nutrient'])  
-        p=list(data['Price'])   
-        sc=c
-        
-        like=list(df['Liked'])
-        rate=list(df['Rated'])
-        date=list(df['Timestamp'])
-        
-        data=zip(n,ids,n,c,sc,vn,r,nt,p,like,rate,date,p)
-    
-        if request.user.is_authenticated:
-            try:
-                img= Profile.objects.get(number=request.user.username).image.url
-            except:
-                img=""
-                
-            return render(request,'website/orders.html',{'data':data,'image':img})
-        
-        else:
-            return render(request,'website/orders.html')
-    else:
-        messages.info(request,'you do have not ordered anything')
-        return render(request,'website/orders.html')
+    if request.user.is_authenticated:
+        try:
+            # Get user profile
+            profile = Profile.objects.get(number=request.user.username)
+            if not profile.second_time:
+                messages.info(request, 'You have not ordered anything.')
+                return render(request, 'website/orders.html')
 
-    
+            # Define file paths
+            recent_activity_path = os.path.join(settings.BASE_DIR, 'website', 'csvfile', 'recent_activity.csv')
+            dataset_path = os.path.join(settings.BASE_DIR, 'website', 'csvfile', 'dataset.csv')
+
+            # Read CSV files
+            try:
+                recent_activity_df = pd.read_csv(recent_activity_path)
+                dataset_df = pd.read_csv(dataset_path)
+            except FileNotFoundError:
+                messages.error(request, "Required files not found.")
+                return redirect('Home')
+
+            # Filter recent activity for the logged-in user
+            user_activity = recent_activity_df.loc[recent_activity_df["User_Id"] == request.user.username]
+            user_activity = user_activity.sort_values(by='Timestamp', ascending=False).drop_duplicates(subset=user_activity.columns.difference(['Timestamp']), keep="last")
+            meal_ids = user_activity["Meal_Id"].unique()
+
+            # Filter dataset based on meal ids
+            data = dataset_df.loc[dataset_df["Meal_Id"].isin(meal_ids)].drop_duplicates(subset='Meal_Id', keep="first")
+
+            # Prepare data for rendering
+            if not data.empty and not user_activity.empty:
+                # Make sure all required columns are present
+                expected_columns = ['Name', 'Meal_Id', 'catagory', 'Veg_Non', 'Review', 'Nutrient', 'Price']
+                if all(col in data.columns for col in expected_columns):
+                    # Extract data into lists
+                    names = data['Name'].tolist()
+                    meal_ids = data['Meal_Id'].tolist()
+                    categories = data['catagory'].tolist()
+                    veg_non = data['Veg_Non'].tolist()
+                    reviews = data['Review'].tolist()
+                    nutrients = data['Nutrient'].tolist()
+                    prices = data['Price'].tolist()
+
+                    # Extract user activity data
+                    likes = user_activity['Liked'].tolist()
+                    rates = user_activity['Rated'].tolist()
+                    timestamps = user_activity['Timestamp'].tolist()
+
+                    # Zip the data together, ensuring we are unpacking correctly
+                    data_zip = zip(names, meal_ids, categories, veg_non, reviews, nutrients, prices, likes, rates, timestamps)
+
+                    # Handle image retrieval safely
+                    img = profile.image.url if profile.image else None
+
+                    return render(request, 'website/orders.html', {'data': data_zip, 'image': img})
+
+            # If no data found
+            messages.info(request, 'No orders found for your account.')
+            return render(request, 'website/orders.html')
+
+        except Profile.DoesNotExist:
+            messages.error(request, "Profile does not exist.")
+            return redirect('Home')
+        except Exception as e:
+            messages.error(request, f"An error occurred: {str(e)}")
+            return redirect('Home')
+
+    messages.error(request, 'You must be logged in to view orders.')
+    return redirect('Home')
+
 def LikeRate(request):
-    if request.method=='POST':
-        ids=list(request.POST.get('idsinp').split(','))
-        like=list(request.POST.get('likeinp').split(','))
-        rate=list(request.POST.get('rateinp').split(','))
-        
-        filename=r'C:\Users\MMG\Desktop\NBMRS\minor\website\csvfile\recent_activity.csv'
-        df=pd.read_csv(filename)
+    if request.method == 'POST':
+        ids = request.POST.get('idsinp', '').split(',')
+        likes = request.POST.get('likeinp', '').split(',')
+        rates = request.POST.get('rateinp', '').split(',')
+
+        # Path to the CSV file
+        filename = os.path.join(settings.BASE_DIR, 'website', 'csvfile', 'recent_activity.csv')
+
+        try:
+            df = pd.read_csv(filename)
+        except FileNotFoundError:
+            messages.error(request, "Recent activity file not found.")
+            return redirect('Home')
+
+        # Ensure data lengths match
+        if not (len(ids) == len(likes) == len(rates)):
+            messages.error(request, "Mismatch in input data lengths.")
+            return redirect('Home')
+
         currentDT = datetime.datetime.now()
-        i=0;
-        for meal in ids:
-            indexNames = df[ (df['User_Id'] ==request.user.username ) & (df['Meal_Id'] == meal) ].index
-            df.drop(indexNames , inplace=True)
-                
-            lst=[request.user.username , meal , rate[i] , like[i] , 0 , 1 , currentDT.strftime("%m/%d/%Y %I:%M:%S %p")]
-            df=df.append(pd.Series(lst,index=df.columns),ignore_index=True) #lst = values in list which we want to insert
-            os.remove(filename)
-            df.to_csv(filename,index=False)
-            i=i+1
-            
+
+        # Loop through each ID and update the DataFrame
+        for i, meal_id in enumerate(ids):
+            # Remove existing entries for the user and meal
+            df = df[~((df['User_Id'] == request.user.username) & (df['Meal_Id'] == meal_id))]
+
+            # Create the new row with the correct number of columns (match this with your CSV structure)
+            new_row = pd.Series({
+                'User_Id': request.user.username,
+                'Meal_Id': meal_id,
+                'Rate': rates[i],
+                'Like': likes[i],
+                'DateTime': currentDT.strftime("%m/%d/%Y %I:%M:%S %p")
+            })
+
+            # Append the new row
+            df = pd.concat([df, new_row.to_frame().T], ignore_index=True)
+
+        # Write the updated DataFrame back to the CSV
+        df.to_csv(filename, index=False)
+
         return redirect('Home')
-        
