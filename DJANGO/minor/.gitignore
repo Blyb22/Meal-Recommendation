@@ -12,5 +12,3 @@ venv/
 .DS_Store
 
 archive/
-DJANGO/minor/minor/__pycache__
-DJANGO/minor/website/__pycache__
